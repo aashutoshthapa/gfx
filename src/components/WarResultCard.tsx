@@ -1,4 +1,4 @@
-import { forwardRef, useState } from "react";
+import { forwardRef } from "react";
 
 interface Attack {
   stars: number;
@@ -34,12 +34,10 @@ export interface CardOverrides {
   backgroundImage?: string;
 }
 
-function StarIcons({ count, max = 3 }: { count: number; max?: number }) {
+function Stars({ count }: { count: number }) {
   return (
-    <span style={{ display: "inline-flex", gap: 2 }}>
-      {Array.from({ length: max }).map((_, i) => (
-        <span key={i} style={{ color: i < count ? "#FFD700" : "#555" }}>★</span>
-      ))}
+    <span style={{ color: "#FFD700", fontSize: 10 }}>
+      {"★".repeat(count)}{"☆".repeat(3 - count)}
     </span>
   );
 }
@@ -66,11 +64,7 @@ const WarResultCard = forwardRef<HTMLDivElement, { data: WarData; overrides?: Ca
     const opponentName = overrides.opponentName || opponent.name;
     const clanLogo = overrides.clanLogo || clan.badgeUrls.medium;
     const opponentLogo = overrides.opponentLogo || opponent.badgeUrls.medium;
-
-    const clanWon = clan.stars > opponent.stars ||
-      (clan.stars === opponent.stars && clan.destructionPercentage > opponent.destructionPercentage);
-    const opponentWon = opponent.stars > clan.stars ||
-      (opponent.stars === clan.stars && opponent.destructionPercentage > clan.destructionPercentage);
+    const bgImage = overrides.backgroundImage || "/images/war-template.png";
 
     const clanSorted = [...clan.members].sort((a, b) => a.mapPosition - b.mapPosition);
     const opponentSorted = [...opponent.members].sort((a, b) => a.mapPosition - b.mapPosition);
@@ -78,104 +72,188 @@ const WarResultCard = forwardRef<HTMLDivElement, { data: WarData; overrides?: Ca
     const allMembers = [...clan.members, ...opponent.members];
     const bestAttacker = getBestAttacker(allMembers);
 
-    const bgStyle: React.CSSProperties = overrides.backgroundImage
-      ? { backgroundImage: `url(${overrides.backgroundImage})`, backgroundSize: "cover", backgroundPosition: "center" }
-      : { background: "linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%)" };
+    // Template is 740x700. We render at that size and overlay text.
+    const W = 740;
+    const H = 700;
 
     return (
       <div
         ref={ref}
         style={{
-          width: 800,
-          minHeight: 900,
-          ...bgStyle,
-          fontFamily: "'Inter', sans-serif",
-          color: "#fff",
+          width: W,
+          height: H,
           position: "relative",
           overflow: "hidden",
+          fontFamily: "'Inter', sans-serif",
+          color: "#fff",
         }}
       >
-        {/* Dark overlay when background image is set */}
-        {overrides.backgroundImage && (
-          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 0 }} />
-        )}
+        {/* Background template image */}
+        <img
+          src={bgImage}
+          alt=""
+          style={{ position: "absolute", inset: 0, width: W, height: H, objectFit: "cover" }}
+        />
 
-        {/* Decorative corners */}
-        <div style={{ position: "absolute", top: 0, right: 0, width: 120, height: 120, background: "linear-gradient(225deg, #e63946 0%, transparent 60%)", opacity: 0.8, zIndex: 1 }} />
-        <div style={{ position: "absolute", bottom: 0, left: 0, width: 120, height: 120, background: "linear-gradient(45deg, #e63946 0%, transparent 60%)", opacity: 0.8, zIndex: 1 }} />
+        {/* Clan logo overlay — positioned over the left logo area */}
+        <img
+          src={clanLogo}
+          alt={clanName}
+          style={{
+            position: "absolute",
+            left: 100,
+            top: 195,
+            width: 70,
+            height: 70,
+            objectFit: "contain",
+          }}
+        />
 
-        <div style={{ position: "relative", zIndex: 2 }}>
-          {/* Header */}
-          <div style={{ textAlign: "center", padding: "30px 20px 10px" }}>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 6, color: "#aaa" }}>RESULT</div>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 72, letterSpacing: 8, color: "#FFD700", lineHeight: 1 }}>MATCH</div>
-          </div>
-
-          {/* Clan badges + names + scores */}
-          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 30, padding: "10px 20px 20px" }}>
-            <div style={{ textAlign: "center", flex: 1 }}>
-              <img src={clanLogo} alt={clanName} style={{ width: 80, height: 80, margin: "0 auto", objectFit: "contain" }} />
-              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, marginTop: 6, color: clanWon ? "#FFD700" : "#ccc" }}>{clanName}</div>
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "baseline", gap: 8, marginTop: 4 }}>
-                <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 36, color: "#FFD700" }}>⭐ {clan.stars}</span>
-                <span style={{ fontSize: 13, color: "#aaa" }}>{clan.destructionPercentage}%</span>
-              </div>
-            </div>
-
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 40, color: "#FFD700", textShadow: "0 0 20px rgba(255,215,0,0.5)" }}>VS</div>
-
-            <div style={{ textAlign: "center", flex: 1 }}>
-              <img src={opponentLogo} alt={opponentName} style={{ width: 80, height: 80, margin: "0 auto", objectFit: "contain" }} />
-              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, marginTop: 6, color: opponentWon ? "#FFD700" : "#ccc" }}>{opponentName}</div>
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "baseline", gap: 8, marginTop: 4 }}>
-                <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 36, color: "#FFD700" }}>⭐ {opponent.stars}</span>
-                <span style={{ fontSize: 13, color: "#aaa" }}>{opponent.destructionPercentage}%</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Player list */}
-          <div style={{ display: "flex", gap: 16, padding: "0 24px", marginTop: 10 }}>
-            <div style={{ flex: 1 }}>
-              {clanSorted.map((m) => {
-                const atk = m.attacks?.[0];
-                return (
-                  <div key={m.tag} style={{ background: "rgba(255,255,255,0.08)", borderRadius: 8, padding: "8px 12px", marginBottom: 6, borderLeft: "3px solid #FFD700" }}>
-                    <div style={{ fontSize: 14, fontWeight: 700 }}>{m.name}</div>
-                    <div style={{ fontSize: 12, color: "#aaa", marginTop: 2 }}>
-                      TH{m.townhallLevel} · {atk ? <><StarIcons count={atk.stars} /> {atk.destructionPercentage}%</> : "No attack"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ flex: 1 }}>
-              {opponentSorted.map((m) => {
-                const atk = m.attacks?.[0];
-                return (
-                  <div key={m.tag} style={{ background: "rgba(255,255,255,0.08)", borderRadius: 8, padding: "8px 12px", marginBottom: 6, borderRight: "3px solid #e63946", textAlign: "right" }}>
-                    <div style={{ fontSize: 14, fontWeight: 700 }}>{m.name}</div>
-                    <div style={{ fontSize: 12, color: "#aaa", marginTop: 2 }}>
-                      TH{m.townhallLevel} · {atk ? <><StarIcons count={atk.stars} /> {atk.destructionPercentage}%</> : "No attack"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Best Attacker */}
-          {bestAttacker && bestAttacker.attacks?.[0] && (
-            <div style={{ textAlign: "center", padding: "24px 20px 30px" }}>
-              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, color: "#aaa", letterSpacing: 3 }}>BEST</div>
-              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 36, color: "#FFD700", lineHeight: 1 }}>ATTACKER</div>
-              <div style={{ fontSize: 16, fontWeight: 700, marginTop: 8 }}>{bestAttacker.name}</div>
-              <div style={{ fontSize: 14, color: "#aaa" }}>
-                <StarIcons count={bestAttacker.attacks[0].stars} /> · {bestAttacker.attacks[0].destructionPercentage}%
-              </div>
-            </div>
-          )}
+        {/* Clan name */}
+        <div style={{
+          position: "absolute",
+          left: 30,
+          top: 275,
+          width: 210,
+          textAlign: "center",
+          fontFamily: "'Bebas Neue', sans-serif",
+          fontSize: 16,
+          letterSpacing: 1,
+          color: "#fff",
+          textShadow: "0 2px 8px rgba(0,0,0,0.9)",
+        }}>
+          {clanName}
         </div>
+
+        {/* Clan stars */}
+        <div style={{
+          position: "absolute",
+          left: 30,
+          top: 295,
+          width: 210,
+          textAlign: "center",
+          fontFamily: "'Bebas Neue', sans-serif",
+          fontSize: 22,
+          color: "#FFD700",
+          textShadow: "0 2px 8px rgba(0,0,0,0.9)",
+        }}>
+          ⭐ {clan.stars} <span style={{ fontSize: 12, color: "#ccc" }}>({clan.destructionPercentage}%)</span>
+        </div>
+
+        {/* Clan player bars — 5 gray bars area, starts around y=390, each ~30px tall with gap */}
+        {clanSorted.slice(0, 5).map((m, i) => {
+          const atk = m.attacks?.[0];
+          return (
+            <div key={m.tag} style={{
+              position: "absolute",
+              left: 22,
+              top: 385 + i * 38,
+              width: 220,
+              height: 30,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "0 10px",
+              fontSize: 11,
+              fontWeight: 700,
+              textShadow: "0 1px 4px rgba(0,0,0,0.9)",
+            }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{m.name}</span>
+              <span style={{ fontSize: 10, color: "#FFD700", whiteSpace: "nowrap" }}>
+                {atk ? <><Stars count={atk.stars} /> {atk.destructionPercentage}%</> : "—"}
+              </span>
+            </div>
+          );
+        })}
+
+        {/* Opponent logo overlay */}
+        <img
+          src={opponentLogo}
+          alt={opponentName}
+          style={{
+            position: "absolute",
+            right: 100,
+            top: 195,
+            width: 70,
+            height: 70,
+            objectFit: "contain",
+          }}
+        />
+
+        {/* Opponent name */}
+        <div style={{
+          position: "absolute",
+          right: 30,
+          top: 275,
+          width: 210,
+          textAlign: "center",
+          fontFamily: "'Bebas Neue', sans-serif",
+          fontSize: 16,
+          letterSpacing: 1,
+          color: "#fff",
+          textShadow: "0 2px 8px rgba(0,0,0,0.9)",
+        }}>
+          {opponentName}
+        </div>
+
+        {/* Opponent stars */}
+        <div style={{
+          position: "absolute",
+          right: 30,
+          top: 295,
+          width: 210,
+          textAlign: "center",
+          fontFamily: "'Bebas Neue', sans-serif",
+          fontSize: 22,
+          color: "#FFD700",
+          textShadow: "0 2px 8px rgba(0,0,0,0.9)",
+        }}>
+          ⭐ {opponent.stars} <span style={{ fontSize: 12, color: "#ccc" }}>({opponent.destructionPercentage}%)</span>
+        </div>
+
+        {/* Opponent player bars */}
+        {opponentSorted.slice(0, 5).map((m, i) => {
+          const atk = m.attacks?.[0];
+          return (
+            <div key={m.tag} style={{
+              position: "absolute",
+              right: 22,
+              top: 385 + i * 38,
+              width: 220,
+              height: 30,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "0 10px",
+              fontSize: 11,
+              fontWeight: 700,
+              textShadow: "0 1px 4px rgba(0,0,0,0.9)",
+              direction: "rtl",
+            }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130, direction: "ltr" }}>{m.name}</span>
+              <span style={{ fontSize: 10, color: "#FFD700", whiteSpace: "nowrap", direction: "ltr" }}>
+                {atk ? <><Stars count={atk.stars} /> {atk.destructionPercentage}%</> : "—"}
+              </span>
+            </div>
+          );
+        })}
+
+        {/* Best Attacker name — center bottom area */}
+        {bestAttacker && bestAttacker.attacks?.[0] && (
+          <div style={{
+            position: "absolute",
+            left: "50%",
+            bottom: 30,
+            transform: "translateX(-50%)",
+            textAlign: "center",
+            textShadow: "0 2px 10px rgba(0,0,0,0.95)",
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{bestAttacker.name}</div>
+            <div style={{ fontSize: 11, color: "#FFD700" }}>
+              <Stars count={bestAttacker.attacks[0].stars} /> {bestAttacker.attacks[0].destructionPercentage}%
+            </div>
+          </div>
+        )}
       </div>
     );
   }
