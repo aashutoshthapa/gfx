@@ -153,9 +153,9 @@ const Index = () => {
           </div>
 
           {/* Right: Preview */}
-          <div className="flex-1 overflow-x-auto">
+          <div className="flex-1 overflow-auto">
             {warData ? (
-              <div className="rounded-xl overflow-hidden shadow-2xl inline-block" style={{ width: 835, transform: "scale(1)", transformOrigin: "top left" }}>
+              <div className="rounded-xl overflow-hidden shadow-2xl inline-block origin-top-left" style={{ transform: "scale(0.5)" }}>
                 <WarResultCard ref={cardRef} data={warData} overrides={overrides} />
               </div>
             ) : (
