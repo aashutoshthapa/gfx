@@ -1,6 +1,9 @@
 import { useState, useRef, useCallback } from "react";
 import { toPng } from "html-to-image";
-import WarResultCard, { type WarData, type CardOverrides } from "@/components/WarResultCard";
+import WarResultCard, { type CardOverrides } from "@/components/WarResultCard";
+import { parseWarData, type WarData } from "@/lib/war";
+
+const DEFAULT_TEMPLATE_IMAGE = "/images/hi.png";
 
 function useFileUpload() {
   const pick = useCallback((): Promise<string | null> => {
@@ -21,41 +24,119 @@ function useFileUpload() {
   return pick;
 }
 
+async function imageUrlToDataUrl(url: string): Promise<string> {
+  if (url.startsWith("data:") || url.startsWith("blob:")) {
+    return url;
+  }
+
+  try {
+    // Correctly detect local vs remote URLs
+    const isAbsolute = /^https?:\/\//i.test(url);
+    const isLocal = !isAbsolute || url.startsWith(window.location.origin) || url.startsWith("/");
+
+    if (isLocal) {
+      // For local assets, fetch directly
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status} for local asset`);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Failed to read local image"));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    // Use AllOrigins 'raw' for remote images to bypass CORS and get actual binary data
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const response = await fetch(proxyUrl);
+    
+    if (!response.ok) {
+      throw new Error(`Proxy returned HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("Failed to read remote image blob"));
+      reader.readAsDataURL(blob);
+    });
+  } catch (err) {
+    console.warn(`Inlining failed for ${url}, falling back to remote URL:`, err);
+    return url; 
+  }
+}
+
+async function waitForCardAssets(element: HTMLElement): Promise<void> {
+  const images = Array.from(element.querySelectorAll("img"));
+
+  await Promise.all(
+    images.map(
+      (image) =>
+        new Promise<void>((resolve, reject) => {
+          if (image.complete) {
+            resolve();
+            return;
+          }
+
+          const onLoad = () => {
+            image.removeEventListener("load", onLoad);
+            image.removeEventListener("error", onError);
+            resolve();
+          };
+          const onError = () => {
+            image.removeEventListener("load", onLoad);
+            image.removeEventListener("error", onError);
+            reject(new Error(`Failed to load image: ${image.src}`));
+          };
+
+          image.addEventListener("load", onLoad);
+          image.addEventListener("error", onError);
+        }),
+    ),
+  );
+
+  if ("fonts" in document) {
+    await document.fonts.ready;
+  }
+
+  await new Promise((resolve) => window.setTimeout(resolve, 150));
+}
+
 const Index = () => {
   const [jsonInput, setJsonInput] = useState("");
   const [warData, setWarData] = useState<WarData | null>(null);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
   const [overrides, setOverrides] = useState<CardOverrides>({});
+  const [isDownloading, setIsDownloading] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const pickFile = useFileUpload();
 
-  const handleGenerate = () => {
-    try {
-      const parsed = JSON.parse(jsonInput);
-      if (!parsed.clan || !parsed.opponent) {
-        setError("JSON must contain 'clan' and 'opponent' fields");
-        return;
-      }
-      setWarData(parsed);
-      setOverrides({});
-      setError("");
-    } catch {
-      setError("Invalid JSON format");
-    }
-  };
-
   const handleDownload = useCallback(async () => {
     if (!cardRef.current) return;
+
+    setIsDownloading(true);
+
     try {
-      // Run toPng twice — first call warms up image loading, second produces clean output
-      await toPng(cardRef.current, { pixelRatio: 2, cacheBust: true, skipAutoScale: true });
-      const dataUrl = await toPng(cardRef.current, { pixelRatio: 2, cacheBust: true, skipAutoScale: true });
+      await waitForCardAssets(cardRef.current);
+      const dataUrl = await toPng(cardRef.current, {
+        pixelRatio: 2,
+        cacheBust: true,
+        skipAutoScale: true,
+        backgroundColor: "#000000",
+      });
       const link = document.createElement("a");
       link.download = "war-result.png";
       link.href = dataUrl;
       link.click();
+      setWarning("");
     } catch (err) {
       console.error("Failed to generate image:", err);
+      setError("Download failed. The preview can still work even if a remote badge host blocks export.");
+    } finally {
+      setIsDownloading(false);
     }
   }, []);
 
@@ -71,6 +152,65 @@ const Index = () => {
     const data = await pickFile();
     if (data) setOverrides((o) => ({ ...o, backgroundImage: data }));
   };
+
+  const applyResolvedWarData = useCallback(async (parsed: WarData) => {
+    // 1. Set the raw data first
+    setWarData(parsed);
+
+    // 2. Initialize overrides if empty (preserve existing ones)
+    setOverrides((current) => ({
+      ...current,
+      clanLogo: current.clanLogo || parsed.clan.badgeUrls.medium,
+      opponentLogo: current.opponentLogo || parsed.opponent.badgeUrls.medium,
+      backgroundImage: current.backgroundImage || DEFAULT_TEMPLATE_IMAGE,
+    }));
+
+    const warnings: string[] = [];
+
+    // Helper to resolve while tracking warnings
+    const resolveWithWarning = async (label: string, url: string) => {
+      const result = await imageUrlToDataUrl(url);
+      if (result === url && /^https?:\/\//i.test(url)) {
+        warnings.push(`${label} could not be embedded for export`);
+      }
+      return result;
+    };
+
+    // 3. Perform inlining in background
+    const [clanLogo, opponentLogo, backgroundImage] = await Promise.all([
+      resolveWithWarning("Clan badge", parsed.clan.badgeUrls.medium),
+      resolveWithWarning("Opponent badge", parsed.opponent.badgeUrls.medium),
+      resolveWithWarning("Template", DEFAULT_TEMPLATE_IMAGE),
+    ]);
+
+    // 4. Update with inlined versions, protecting manual uploads
+    setOverrides((current) => {
+      // Logic: If current logo is already a Data URL AND it doesn't contain "allorigins" 
+      // (which is our proxy format), it's likely a manual upload.
+      const isClanManual = current.clanLogo?.startsWith("data:") && !current.clanLogo?.includes("allorigins");
+      const isOpponentManual = current.opponentLogo?.startsWith("data:") && !current.opponentLogo?.includes("allorigins");
+
+      return {
+        ...current,
+        clanLogo: isClanManual ? current.clanLogo : (clanLogo || current.clanLogo),
+        opponentLogo: isOpponentManual ? current.opponentLogo : (opponentLogo || current.opponentLogo),
+        backgroundImage: backgroundImage || current.backgroundImage || DEFAULT_TEMPLATE_IMAGE,
+      };
+    });
+
+    setWarning(warnings.join(". "));
+  }, []);
+
+  const handleGenerateResolved = useCallback(async () => {
+    try {
+      const parsed = parseWarData(jsonInput);
+      await applyResolvedWarData(parsed);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid JSON format");
+      setWarning("");
+    }
+  }, [applyResolvedWarData, jsonInput]);
 
   return (
     <div className="min-h-screen bg-background p-6 md:p-10" style={{ fontFamily: "var(--font-body)" }}>
@@ -89,12 +229,14 @@ const Index = () => {
               value={jsonInput}
               onChange={(e) => setJsonInput(e.target.value)}
               placeholder="Paste your COC war JSON here..."
+              spellCheck={false}
               className="w-full h-52 bg-card text-foreground border border-border rounded-lg p-4 text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-ring"
             />
             {error && <p className="text-destructive text-sm">{error}</p>}
+            {warning && <p className="text-amber-400 text-sm">{warning}</p>}
 
             <button
-              onClick={handleGenerate}
+              onClick={handleGenerateResolved}
               className="w-full px-6 py-2.5 rounded-lg font-bold text-sm bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
             >
               Generate
@@ -144,19 +286,31 @@ const Index = () => {
                 {/* Download */}
                 <button
                   onClick={handleDownload}
+                  disabled={isDownloading}
                   className="w-full px-6 py-3 rounded-lg font-bold text-sm bg-secondary text-secondary-foreground hover:opacity-90 transition-opacity"
                 >
-                  ⬇ Download PNG
+                  {isDownloading ? "Preparing PNG..." : "⬇ Download PNG"}
                 </button>
               </div>
             )}
           </div>
 
           {/* Right: Preview */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto min-h-[500px]">
             {warData ? (
-              <div className="rounded-xl overflow-hidden shadow-2xl inline-block origin-top-left" style={{ transform: "scale(0.5)" }}>
-                <WarResultCard ref={cardRef} data={warData} overrides={overrides} />
+              <div className="w-full flex justify-center">
+                <div 
+                  className="rounded-xl overflow-hidden shadow-2xl border border-border origin-top-left" 
+                  style={{ 
+                    width: 1670,
+                    height: 1580,
+                    transform: "scale(0.45)", // Fixed scale that fits most screens
+                    marginBottom: -1580 * 0.55, // Negative margin to collapse the space occupied by the scaled-down element
+                    marginRight: -1670 * 0.55,
+                  }}
+                >
+                  <WarResultCard ref={cardRef} data={warData} overrides={overrides} />
+                </div>
               </div>
             ) : (
               <div className="w-full h-64 border-2 border-dashed border-border rounded-xl flex items-center justify-center text-muted-foreground text-sm">

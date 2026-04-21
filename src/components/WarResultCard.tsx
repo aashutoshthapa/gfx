@@ -1,30 +1,5 @@
 import { forwardRef } from "react";
-
-interface Attack {
-  stars: number;
-  destructionPercentage: number;
-}
-
-interface Member {
-  tag: string;
-  name: string;
-  townhallLevel: number;
-  mapPosition: number;
-  attacks?: Attack[];
-}
-
-interface ClanData {
-  name: string;
-  badgeUrls: { medium: string };
-  stars: number;
-  destructionPercentage: number;
-  members: Member[];
-}
-
-export interface WarData {
-  clan: ClanData;
-  opponent: ClanData;
-}
+import { getPrimaryAttack, type Member, type WarData } from "@/lib/war";
 
 export interface CardOverrides {
   clanName?: string;
@@ -36,18 +11,24 @@ export interface CardOverrides {
 
 function Stars({ count }: { count: number }) {
   return (
-    <span style={{ color: "#FFD700", fontSize: 20 }}>
+    <span style={{ color: "##000000", fontSize: 22 }}>
       {"★".repeat(count)}{"☆".repeat(3 - count)}
     </span>
   );
+}
+
+function formatPercent(value: number): string {
+  return Number.isInteger(value) ? `${value}%` : `${value.toFixed(1)}%`;
 }
 
 function getBestAttacker(members: Member[]): Member | null {
   let best: Member | null = null;
   let bestStars = -1;
   let bestPct = -1;
+
   for (const m of members) {
-    const atk = m.attacks?.[0];
+    const atk = getPrimaryAttack(m.attacks);
+
     if (atk && (atk.stars > bestStars || (atk.stars === bestStars && atk.destructionPercentage > bestPct))) {
       best = m;
       bestStars = atk.stars;
@@ -59,23 +40,185 @@ function getBestAttacker(members: Member[]): Member | null {
 
 // Bar positions from template analysis (1670x1580)
 const LEFT_BARS = [
-  { y: 977, h: 58, x: 148, w: 686 },
-  { y: 1064, h: 57, x: 148, w: 686 },
-  { y: 1150, h: 57, x: 148, w: 652 },
-  { y: 1218, h: 76, x: 148, w: 686 },
-  { y: 1323, h: 57, x: 148, w: 537 },
+  { y: 889, h: 58, x: 110, w: 640 },
+  { y: 976, h: 57, x: 110, w: 640 },
+  { y: 1062, h: 57, x: 110, w: 652 },
+  { y: 1130, h: 76, x: 110, w: 580 }, // Shortened for center box
+  { y: 1235, h: 57, x: 110, w: 537 },
 ];
 
 const RIGHT_BARS = [
-  { y: 978, h: 57, x: 835, w: 681 },
-  { y: 1064, h: 57, x: 835, w: 684 },
-  { y: 1150, h: 57, x: 986, w: 537 },
-  { y: 1219, h: 75, x: 835, w: 691 },
-  { y: 1323, h: 57, x: 993, w: 537 },
+  { y: 890, h: 57, x: 1020, w: 500 },
+  { y: 976, h: 57, x: 1020, w: 500 },
+  { y: 1062, h: 57, x: 1020, w: 500 },
+  { y: 1131, h: 75, x: 1020, w: 500 },
+  { y: 1235, h: 57, x: 1020, w: 500 },
 ];
 
 const W = 1670;
 const H = 1580;
+const NAME_FONT = "'Inter', 'Segoe UI', 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif";
+const DISPLAY_FONT = "'Bebas Neue', 'Arial Narrow', sans-serif";
+
+function TeamHeader({
+  align,
+  logo,
+  name,
+  stars,
+  destructionPercentage,
+}: {
+  align: "left" | "right";
+  logo: string;
+  name: string;
+  stars: number;
+  destructionPercentage: number;
+}) {
+  const isLeft = align === "left";
+
+  return (
+    <>
+      <img
+        src={logo}
+        alt={name}
+        style={{
+          position: "absolute",
+          [isLeft ? "left" : "right"]: 184,
+          top: 634,
+          width: 132,
+          height: 132,
+          objectFit: "contain",
+          filter: "drop-shadow(0 8px 14px rgba(0,0,0,0.4))",
+        }}
+      />
+
+      <div
+        style={{
+          position: "absolute",
+          [isLeft ? "left" : "right"]: 44,
+          top: 776,
+          width: 420,
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: DISPLAY_FONT,
+            fontSize: 42,
+            lineHeight: 1,
+            fontWeight: 800,
+            letterSpacing: 1.5,
+            textTransform: "uppercase",
+            textShadow: "0 3px 10px rgba(0,0,0,0.9)",
+          }}
+        >
+          {name}
+        </div>
+        <div
+          style={{
+            marginTop: 8,
+            fontFamily: DISPLAY_FONT,
+            fontSize: 34,
+            color: "#ffd66b",
+            textShadow: "0 2px 8px rgba(0,0,0,0.9)",
+          }}
+        >
+          {stars} STARS
+          <span
+            style={{
+              marginLeft: 10,
+              fontSize: 24,
+              color: "#f7f1d6",
+            }}
+          >
+            {formatPercent(destructionPercentage)}
+          </span>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function MemberBar({
+  member,
+  bar,
+  side,
+}: {
+  member: Member;
+  bar: (typeof LEFT_BARS)[number];
+  side: "left" | "right";
+}) {
+  const attack = getPrimaryAttack(member.attacks);
+  const isLeft = side === "left";
+  const rowInset = 28;
+  const scoreWidth = 140;
+  const contentWidth = Math.max(bar.w - rowInset * 2, 120);
+  const nameWidth = Math.max(contentWidth - scoreWidth - 12, 120);
+
+  return (
+    <div
+      key={member.tag}
+      style={{
+        position: "absolute",
+        left: bar.x,
+        top: bar.y,
+        width: bar.w,
+        height: bar.h,
+        color: "#391900",
+      }}
+    >
+        <div
+          style={{
+            position: "absolute",
+            [isLeft ? "left" : "left"]: isLeft ? 0 : 118, // Moved right names 1cm more right
+            top: "50%",
+            transform: "translateY(-50%)",
+            minWidth: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-start",
+            gap: 20, // Approx 4-5 spaces
+          }}
+        >
+          <div
+            style={{
+              minWidth: 0,
+              fontFamily: NAME_FONT,
+              fontSize: 28,
+              fontWeight: 800,
+              lineHeight: 1.1,
+              whiteSpace: "nowrap",
+              textAlign: "left",
+            }}
+          >
+            {member.name}
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-start",
+              gap: 8,
+              fontFamily: DISPLAY_FONT,
+              fontSize: 24,
+              fontWeight: 800,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            {attack ? (
+              <>
+                <Stars count={attack.stars} />
+                <span>{formatPercent(attack.destructionPercentage)}</span>
+              </>
+            ) : (
+              <span>{"NO ATTACK"}</span>
+            )}
+          </div>
+        </div>
+    </div>
+  );
+}
 
 const WarResultCard = forwardRef<HTMLDivElement, { data: WarData; overrides?: CardOverrides }>(
   ({ data, overrides = {} }, ref) => {
@@ -84,44 +227,14 @@ const WarResultCard = forwardRef<HTMLDivElement, { data: WarData; overrides?: Ca
     const opponentName = overrides.opponentName || opponent.name;
     const clanLogo = overrides.clanLogo || clan.badgeUrls.medium;
     const opponentLogo = overrides.opponentLogo || opponent.badgeUrls.medium;
-    const bgImage = overrides.backgroundImage || "/images/war-template.png";
+    const bgImage = overrides.backgroundImage || "/images/hi.png";
 
     const clanSorted = [...clan.members].sort((a, b) => a.mapPosition - b.mapPosition);
     const opponentSorted = [...opponent.members].sort((a, b) => a.mapPosition - b.mapPosition);
 
     const allMembers = [...clan.members, ...opponent.members];
     const bestAttacker = getBestAttacker(allMembers);
-
-    const barText = (m: Member, bar: typeof LEFT_BARS[0], align: "left" | "right") => {
-      const atk = m.attacks?.[0];
-      return (
-        <div key={m.tag} style={{
-          position: "absolute",
-          left: bar.x,
-          top: bar.y,
-          width: bar.w,
-          height: bar.h,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 20px",
-          fontSize: 22,
-          fontWeight: 800,
-          fontFamily: "'Bebas Neue', sans-serif",
-          letterSpacing: 1,
-          color: "#1a0a00",
-          direction: align === "right" ? "rtl" : "ltr",
-        }}>
-          <span style={{
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            maxWidth: bar.w * 0.55, direction: "ltr",
-          }}>{m.name}</span>
-          <span style={{ fontSize: 18, whiteSpace: "nowrap", direction: "ltr", display: "flex", alignItems: "center", gap: 6 }}>
-            {atk ? <><Stars count={atk.stars} /> {atk.destructionPercentage}%</> : "—"}
-          </span>
-        </div>
-      );
-    };
+    const bestAttack = bestAttacker ? getPrimaryAttack(bestAttacker.attacks) : null;
 
     return (
       <div
@@ -129,100 +242,94 @@ const WarResultCard = forwardRef<HTMLDivElement, { data: WarData; overrides?: Ca
         style={{
           width: W,
           height: H,
+          aspectRatio: `${W} / ${H}`,
           position: "relative",
           overflow: "hidden",
-          fontFamily: "'Bebas Neue', sans-serif",
+          fontFamily: DISPLAY_FONT,
           color: "#fff",
+          flexShrink: 0,
+          maxWidth: "none",
         }}
       >
         <img
           src={bgImage}
           alt=""
-          crossOrigin="anonymous"
-          style={{ position: "absolute", inset: 0, width: W, height: H, objectFit: "cover" }}
-        />
-
-        {/* Clan logo */}
-        <img
-          src={clanLogo}
-          alt={clanName}
-          crossOrigin="anonymous"
-          style={{
-            position: "absolute",
-            left: 180,
-            top: 620,
-            width: 140,
-            height: 140,
-            objectFit: "contain",
+          style={{ 
+            position: "absolute", 
+            inset: 0, 
+            width: W, 
+            height: H, 
+            objectFit: "fill",
+            maxWidth: "none",
           }}
         />
 
-        {/* Clan name + stars */}
-        <div style={{
-          position: "absolute",
-          left: 50,
-          top: 780,
-          width: 440,
-          textAlign: "center",
-        }}>
-          <div style={{ fontSize: 36, fontWeight: 800, letterSpacing: 2, textShadow: "0 3px 10px rgba(0,0,0,0.9)" }}>
-            {clanName}
-          </div>
-          <div style={{ fontSize: 30, color: "#FFD700", textShadow: "0 2px 8px rgba(0,0,0,0.9)" }}>
-            ⭐ {clan.stars} <span style={{ fontSize: 20, color: "#ddd" }}>({clan.destructionPercentage}%)</span>
-          </div>
-        </div>
-
-        {/* Opponent logo */}
-        <img
-          src={opponentLogo}
-          alt={opponentName}
-          crossOrigin="anonymous"
-          style={{
-            position: "absolute",
-            right: 180,
-            top: 620,
-            width: 140,
-            height: 140,
-            objectFit: "contain",
-          }}
+        <TeamHeader
+          align="left"
+          logo={clanLogo}
+          name={clanName}
+          stars={clan.stars}
+          destructionPercentage={clan.destructionPercentage}
         />
-
-        {/* Opponent name + stars */}
-        <div style={{
-          position: "absolute",
-          right: 50,
-          top: 780,
-          width: 440,
-          textAlign: "center",
-        }}>
-          <div style={{ fontSize: 36, fontWeight: 800, letterSpacing: 2, textShadow: "0 3px 10px rgba(0,0,0,0.9)" }}>
-            {opponentName}
-          </div>
-          <div style={{ fontSize: 30, color: "#FFD700", textShadow: "0 2px 8px rgba(0,0,0,0.9)" }}>
-            ⭐ {opponent.stars} <span style={{ fontSize: 20, color: "#ddd" }}>({opponent.destructionPercentage}%)</span>
-          </div>
-        </div>
+        <TeamHeader
+          align="right"
+          logo={opponentLogo}
+          name={opponentName}
+          stars={opponent.stars}
+          destructionPercentage={opponent.destructionPercentage}
+        />
 
         {/* Clan player bars */}
-        {clanSorted.slice(0, 5).map((m, i) => barText(m, LEFT_BARS[i], "left"))}
+        {clanSorted.slice(0, 5).map((member, index) => (
+          <MemberBar key={member.tag} member={member} bar={LEFT_BARS[index]} side="left" />
+        ))}
 
         {/* Opponent player bars */}
-        {opponentSorted.slice(0, 5).map((m, i) => barText(m, RIGHT_BARS[i], "right"))}
+        {opponentSorted.slice(0, 5).map((member, index) => (
+          <MemberBar key={member.tag} member={member} bar={RIGHT_BARS[index]} side="right" />
+        ))}
 
         {/* Best Attacker */}
-        {bestAttacker && bestAttacker.attacks?.[0] && (
-          <div style={{
-            position: "absolute",
-            left: "50%",
-            top: 1440,
-            transform: "translateX(-50%)",
-            textAlign: "center",
-            textShadow: "0 3px 12px rgba(0,0,0,0.95)",
-          }}>
-            <div style={{ fontSize: 28, fontWeight: 800 }}>{bestAttacker.name}</div>
-            <div style={{ fontSize: 22, color: "#FFD700", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-              <Stars count={bestAttacker.attacks[0].stars} /> {bestAttacker.attacks[0].destructionPercentage}%
+        {bestAttacker && bestAttack && (
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: 1281, // Moved down another 0.5cm for hi.png
+              width: 350,
+              height: 40,
+              transform: "translateX(-50%) translateY(-50%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 12,
+              color: "#391900",
+              padding: "0 12px",
+            }}
+          >
+            <div
+              style={{
+                minWidth: 0,
+                fontFamily: NAME_FONT,
+                fontSize: 26,
+                fontWeight: 800,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {bestAttacker.name}
+            </div>
+            <div
+              style={{
+                fontFamily: DISPLAY_FONT,
+                fontSize: 22,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <Stars count={bestAttack.stars} />
+              {formatPercent(bestAttack.destructionPercentage)}
             </div>
           </div>
         )}
