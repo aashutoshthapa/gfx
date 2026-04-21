@@ -4,6 +4,23 @@ import WarResultCard, { type CardOverrides } from "@/components/WarResultCard";
 import { parseWarData, type WarData } from "@/lib/war";
 
 const DEFAULT_TEMPLATE_IMAGE = "/images/hi.png";
+const EXPORT_IMAGE_PLACEHOLDER = (() => {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#4b5563" />
+          <stop offset="100%" stop-color="#111827" />
+        </linearGradient>
+      </defs>
+      <rect width="160" height="160" rx="28" fill="url(#g)" />
+      <circle cx="80" cy="64" r="28" fill="#f3f4f6" fill-opacity="0.16" />
+      <path d="M48 126c7-21 20-31 32-31s25 10 32 31" fill="none" stroke="#f3f4f6" stroke-opacity="0.72" stroke-width="12" stroke-linecap="round" />
+    </svg>
+  `.trim();
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+})();
 
 function useFileUpload() {
   const pick = useCallback((): Promise<string | null> => {
@@ -126,6 +143,7 @@ const Index = () => {
         cacheBust: true,
         skipAutoScale: true,
         backgroundColor: "#000000",
+        imagePlaceholder: EXPORT_IMAGE_PLACEHOLDER,
       });
       const link = document.createElement("a");
       link.download = "war-result.png";
@@ -134,7 +152,7 @@ const Index = () => {
       setWarning("");
     } catch (err) {
       console.error("Failed to generate image:", err);
-      setError("Download failed. The preview can still work even if a remote badge host blocks export.");
+      setError("Download failed. Preview can still show remote badges that PNG export is not allowed to embed.");
     } finally {
       setIsDownloading(false);
     }
@@ -197,6 +215,10 @@ const Index = () => {
         backgroundImage: backgroundImage || current.backgroundImage || DEFAULT_TEMPLATE_IMAGE,
       };
     });
+
+    if (warnings.length > 0) {
+      warnings.push("Preview may still show the live badge, but PNG export will use a fallback image if embedding is blocked");
+    }
 
     setWarning(warnings.join(". "));
   }, []);
