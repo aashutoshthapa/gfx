@@ -41,48 +41,68 @@ function useFileUpload() {
   return pick;
 }
 
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 5000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function imageUrlToDataUrl(url: string): Promise<string> {
   if (url.startsWith("data:") || url.startsWith("blob:")) {
     return url;
   }
 
+  console.log(`[Inlining] Starting: ${url}`);
   try {
-    // Correctly detect local vs remote URLs
     const isAbsolute = /^https?:\/\//i.test(url);
     const isLocal = !isAbsolute || url.startsWith(window.location.origin) || url.startsWith("/");
 
     if (isLocal) {
-      // For local assets, fetch directly
-      const response = await fetch(url);
+      const targetUrl = isAbsolute ? url : new URL(url, window.location.origin).href;
+      console.log(`[Inlining] Local fetch: ${targetUrl}`);
+      const response = await fetchWithTimeout(targetUrl, undefined, 5000);
       if (!response.ok) throw new Error(`HTTP ${response.status} for local asset`);
-      const blob = await response.blob();
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Failed to read local image"));
-        reader.readAsDataURL(blob);
-      });
+      const dataUrl = await blobToDataUrl(await response.blob());
+      console.log(`[Inlining] Success: ${url.substring(0, 40)}...`);
+      return dataUrl;
     }
 
-    // Use AllOrigins 'raw' for remote images to bypass CORS and get actual binary data
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-    const response = await fetch(proxyUrl);
-    
-    if (!response.ok) {
-      throw new Error(`Proxy returned HTTP ${response.status}`);
-    }
+    const candidates = [
+      { label: "direct", target: url },
+      { label: "proxy", target: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
+    ];
 
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error("Failed to read remote image blob"));
-      reader.readAsDataURL(blob);
-    });
+    for (const candidate of candidates) {
+      try {
+        console.log(`[Inlining] Remote fetch (${candidate.label}): ${url}`);
+        const response = await fetchWithTimeout(candidate.target, undefined, 5000);
+        if (!response.ok) throw new Error(`${candidate.label} HTTP ${response.status}`);
+        const dataUrl = await blobToDataUrl(await response.blob());
+        console.log(`[Inlining] Success (${candidate.label}): ${url.substring(0, 40)}...`);
+        return dataUrl;
+      } catch (err) {
+        console.warn(`[Inlining] ${candidate.label} failed for ${url}:`, err);
+      }
+    }
   } catch (err) {
-    console.warn(`Inlining failed for ${url}, falling back to remote URL:`, err);
-    return url; 
+    console.error(`[Inlining] Critical failure for ${url}:`, err);
   }
+
+  console.warn(`[Inlining] Fallback for ${url}`);
+  return EXPORT_IMAGE_PLACEHOLDER;
 }
 
 async function waitForCardAssets(element: HTMLElement): Promise<void> {
