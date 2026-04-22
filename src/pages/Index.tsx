@@ -140,7 +140,6 @@ const Index = () => {
       await waitForCardAssets(cardRef.current);
       const dataUrl = await toPng(cardRef.current, {
         pixelRatio: 2,
-        cacheBust: true,
         skipAutoScale: true,
         backgroundColor: "#000000",
         imagePlaceholder: EXPORT_IMAGE_PLACEHOLDER,
