@@ -107,7 +107,6 @@ function TeamHeader({
             lineHeight: 1,
             fontWeight: 800,
             letterSpacing: 1.5,
-            textTransform: "uppercase",
             textShadow: "0 3px 10px rgba(0,0,0,0.9)",
           }}
         >
