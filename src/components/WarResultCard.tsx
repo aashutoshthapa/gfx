@@ -102,11 +102,11 @@ function TeamHeader({
       >
         <div
           style={{
-            fontFamily: DISPLAY_FONT,
-            fontSize: 42,
+            fontFamily: NAME_FONT,
+            fontSize: 36,
             lineHeight: 1,
             fontWeight: 800,
-            letterSpacing: 1.5,
+            letterSpacing: 0,
             textShadow: "0 3px 10px rgba(0,0,0,0.9)",
           }}
         >
