@@ -9,9 +9,9 @@ export interface CardOverrides {
   backgroundImage?: string;
 }
 
-function Stars({ count }: { count: number }) {
+function Stars({ count, size = 30 }: { count: number; size?: number }) {
   return (
-    <span style={{ color: "##000000", fontSize: 22 }}>
+    <span style={{ color: "#000000", fontSize: size, lineHeight: 1 }}>
       {"★".repeat(count)}{"☆".repeat(3 - count)}
     </span>
   );
@@ -58,6 +58,7 @@ const RIGHT_BARS = [
 const W = 1670;
 const H = 1580;
 const NAME_FONT = "'Inter', 'Segoe UI', 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif";
+const TEAM_NAME_FONT = "'Bangers', 'Bebas Neue', 'Arial Narrow', sans-serif";
 const DISPLAY_FONT = "'Bebas Neue', 'Arial Narrow', sans-serif";
 
 function TeamHeader({
@@ -82,12 +83,12 @@ function TeamHeader({
         alt={name}
         style={{
           position: "absolute",
-          [isLeft ? "left" : "right"]: 184,
-          top: 634,
-          width: 132,
-          height: 132,
+          [isLeft ? "left" : "right"]: 158,
+          top: 552,
+          width: 184,
+          height: 184,
           objectFit: "contain",
-          filter: "drop-shadow(0 8px 14px rgba(0,0,0,0.4))",
+          filter: "drop-shadow(0 10px 18px rgba(0,0,0,0.48))",
         }}
       />
 
@@ -95,19 +96,19 @@ function TeamHeader({
         style={{
           position: "absolute",
           [isLeft ? "left" : "right"]: 44,
-          top: 776,
+          top: 738,
           width: 420,
           textAlign: "center",
         }}
       >
         <div
           style={{
-            fontFamily: NAME_FONT,
-            fontSize: 36,
+            fontFamily: TEAM_NAME_FONT,
+            fontSize: 46,
             lineHeight: 1,
-            fontWeight: 800,
+            fontWeight: 400,
             letterSpacing: 0,
-            textShadow: "0 3px 10px rgba(0,0,0,0.9)",
+            textShadow: "0 4px 0 rgba(0,0,0,0.55), 0 8px 14px rgba(0,0,0,0.9)",
           }}
         >
           {name}
@@ -116,7 +117,7 @@ function TeamHeader({
           style={{
             marginTop: 8,
             fontFamily: DISPLAY_FONT,
-            fontSize: 34,
+            fontSize: 44,
             color: "#ffd66b",
             textShadow: "0 2px 8px rgba(0,0,0,0.9)",
           }}
@@ -125,7 +126,7 @@ function TeamHeader({
           <span
             style={{
               marginLeft: 10,
-              fontSize: 24,
+              fontSize: 32,
               color: "#f7f1d6",
             }}
           >
@@ -199,7 +200,7 @@ function MemberBar({
               justifyContent: "flex-start",
               gap: 8,
               fontFamily: DISPLAY_FONT,
-              fontSize: 24,
+              fontSize: 30,
               fontWeight: 800,
               whiteSpace: "nowrap",
               flexShrink: 0,
@@ -295,23 +296,28 @@ const WarResultCard = forwardRef<HTMLDivElement, { data: WarData; overrides?: Ca
               position: "absolute",
               left: "50%",
               top: 1281, // Moved down another 0.5cm for hi.png
-              width: 350,
+              width: 356,
               height: 40,
               transform: "translateX(-50%) translateY(-50%)",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              gap: 12,
+              justifyContent: "space-between",
+              gap: 8,
               color: "#391900",
-              padding: "0 12px",
+              padding: "0 18px",
+              boxSizing: "border-box",
             }}
           >
             <div
               style={{
                 minWidth: 0,
+                flex: "1 1 auto",
                 fontFamily: NAME_FONT,
-                fontSize: 26,
+                fontSize: 24,
                 fontWeight: 800,
+                lineHeight: 1,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
               }}
             >
@@ -319,15 +325,18 @@ const WarResultCard = forwardRef<HTMLDivElement, { data: WarData; overrides?: Ca
             </div>
             <div
               style={{
+                flex: "0 0 118px",
                 fontFamily: DISPLAY_FONT,
-                fontSize: 22,
+                fontSize: 24,
                 display: "flex",
                 alignItems: "center",
-                gap: 6,
+                justifyContent: "flex-end",
+                gap: 5,
+                lineHeight: 1,
                 whiteSpace: "nowrap",
               }}
             >
-              <Stars count={bestAttack.stars} />
+              <Stars count={bestAttack.stars} size={24} />
               {formatPercent(bestAttack.destructionPercentage)}
             </div>
           </div>
