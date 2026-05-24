@@ -83,7 +83,7 @@ function TeamHeader({
         alt={name}
         style={{
           position: "absolute",
-          [isLeft ? "left" : "right"]: 158,
+          [isLeft ? "left" : "right"]: isLeft ? 158 : 275,
           top: 552,
           width: 184,
           height: 184,
@@ -95,7 +95,7 @@ function TeamHeader({
       <div
         style={{
           position: "absolute",
-          [isLeft ? "left" : "right"]: 44,
+          [isLeft ? "left" : "right"]: isLeft ? 44 : 161,
           top: 738,
           width: 420,
           textAlign: "center",
@@ -183,7 +183,7 @@ function MemberBar({
             style={{
               minWidth: 0,
               fontFamily: NAME_FONT,
-              fontSize: 28,
+              fontSize: 19,
               fontWeight: 800,
               lineHeight: 1.1,
               whiteSpace: "nowrap",
