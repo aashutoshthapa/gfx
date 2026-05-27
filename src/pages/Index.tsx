@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { toPng } from "html-to-image";
 import WarResultCard, { type CardOverrides } from "@/components/WarResultCard";
+import MatchScheduleCard, { type MatchScheduleData } from "@/components/MatchScheduleCard";
 import { parseWarData, type WarData } from "@/lib/war";
 
 const DEFAULT_TEMPLATE_IMAGE = "/images/hi.png";
@@ -142,30 +143,41 @@ async function waitForCardAssets(element: HTMLElement): Promise<void> {
 }
 
 const Index = () => {
+  const [mode, setMode] = useState<"result" | "schedule">("result");
   const [jsonInput, setJsonInput] = useState("");
   const [warData, setWarData] = useState<WarData | null>(null);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
   const [overrides, setOverrides] = useState<CardOverrides>({});
+  const [schedule, setSchedule] = useState<MatchScheduleData>({
+    teamOneName: "NETHERLANDS",
+    teamTwoName: "GORKHA ROCKS",
+    matchTitle: "MATCH 2",
+    date: "21 May 2026",
+    time: "22:45",
+    timezone: "(UTC)",
+  });
   const [isDownloading, setIsDownloading] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const scheduleCardRef = useRef<HTMLDivElement>(null);
   const pickFile = useFileUpload();
 
   const handleDownload = useCallback(async () => {
-    if (!cardRef.current) return;
+    const target = mode === "schedule" ? scheduleCardRef.current : cardRef.current;
+    if (!target) return;
 
     setIsDownloading(true);
 
     try {
-      await waitForCardAssets(cardRef.current);
-      const dataUrl = await toPng(cardRef.current, {
+      await waitForCardAssets(target);
+      const dataUrl = await toPng(target, {
         pixelRatio: 2,
         skipAutoScale: true,
         backgroundColor: "#000000",
         imagePlaceholder: EXPORT_IMAGE_PLACEHOLDER,
       });
       const link = document.createElement("a");
-      link.download = "war-result.png";
+      link.download = mode === "schedule" ? "match-schedule.png" : "war-result.png";
       link.href = dataUrl;
       link.click();
       setWarning("");
@@ -175,7 +187,7 @@ const Index = () => {
     } finally {
       setIsDownloading(false);
     }
-  }, []);
+  }, [mode]);
 
   const uploadClanLogo = async () => {
     const data = await pickFile();
@@ -188,6 +200,18 @@ const Index = () => {
   const uploadBackground = async () => {
     const data = await pickFile();
     if (data) setOverrides((o) => ({ ...o, backgroundImage: data }));
+  };
+  const uploadTeamOneLogo = async () => {
+    const data = await pickFile();
+    if (data) setSchedule((current) => ({ ...current, teamOneLogo: data }));
+  };
+  const uploadTeamTwoLogo = async () => {
+    const data = await pickFile();
+    if (data) setSchedule((current) => ({ ...current, teamTwoLogo: data }));
+  };
+
+  const updateSchedule = (field: keyof MatchScheduleData, value: string) => {
+    setSchedule((current) => ({ ...current, [field]: value }));
   };
 
   const applyResolvedWarData = useCallback(async (parsed: WarData) => {
@@ -257,33 +281,136 @@ const Index = () => {
     <div className="min-h-screen bg-background p-6 md:p-10" style={{ fontFamily: "var(--font-body)" }}>
       <div className="max-w-6xl mx-auto">
         <h1 className="text-foreground text-3xl font-bold mb-2" style={{ fontFamily: "var(--font-display)", letterSpacing: 4 }}>
-          COC WAR RESULT GENERATOR
+          COC GFX GENERATOR
         </h1>
         <p className="text-muted-foreground mb-6 text-sm">
-          Paste your Clash of Clans war API JSON, customize logos &amp; names, then download as PNG.
+          Generate war result cards or match schedule graphics, customize logos &amp; names, then download as PNG.
         </p>
+
+        <div className="mb-6 inline-flex rounded-lg border border-border bg-card p-1">
+          <button
+            onClick={() => {
+              setMode("result");
+              setError("");
+              setWarning("");
+            }}
+            className={`px-4 py-2 rounded-md text-sm font-bold transition-colors ${
+              mode === "result" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            War Result
+          </button>
+          <button
+            onClick={() => {
+              setMode("schedule");
+              setError("");
+              setWarning("");
+            }}
+            className={`px-4 py-2 rounded-md text-sm font-bold transition-colors ${
+              mode === "schedule" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Match Schedule
+          </button>
+        </div>
 
         <div className="flex flex-col xl:flex-row gap-8">
           {/* Left: Input + Controls */}
           <div className="w-full xl:w-[380px] shrink-0 space-y-4">
-            <textarea
-              value={jsonInput}
-              onChange={(e) => setJsonInput(e.target.value)}
-              placeholder="Paste your COC war JSON here..."
-              spellCheck={false}
-              className="w-full h-52 bg-card text-foreground border border-border rounded-lg p-4 text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+            {mode === "result" ? (
+              <textarea
+                value={jsonInput}
+                onChange={(e) => setJsonInput(e.target.value)}
+                placeholder="Paste your COC war JSON here..."
+                spellCheck={false}
+                className="w-full h-52 bg-card text-foreground border border-border rounded-lg p-4 text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">Match Title</label>
+                  <input
+                    type="text"
+                    value={schedule.matchTitle}
+                    onChange={(e) => updateSchedule("matchTitle", e.target.value)}
+                    className="w-full mt-1 bg-card text-foreground border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Team 1 Name</label>
+                    <input
+                      type="text"
+                      value={schedule.teamOneName}
+                      onChange={(e) => updateSchedule("teamOneName", e.target.value)}
+                      className="w-full mt-1 bg-card text-foreground border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Team 2 Name</label>
+                    <input
+                      type="text"
+                      value={schedule.teamTwoName}
+                      onChange={(e) => updateSchedule("teamTwoName", e.target.value)}
+                      className="w-full mt-1 bg-card text-foreground border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={uploadTeamOneLogo} className="px-3 py-2 rounded-lg text-xs font-semibold bg-muted text-muted-foreground hover:opacity-80 transition-opacity">
+                    Upload Team 1 Logo
+                  </button>
+                  <button onClick={uploadTeamTwoLogo} className="px-3 py-2 rounded-lg text-xs font-semibold bg-muted text-muted-foreground hover:opacity-80 transition-opacity">
+                    Upload Team 2 Logo
+                  </button>
+                </div>
+
+                <div>
+                  <label className="text-xs text-muted-foreground">Date</label>
+                  <input
+                    type="text"
+                    value={schedule.date}
+                    onChange={(e) => updateSchedule("date", e.target.value)}
+                    className="w-full mt-1 bg-card text-foreground border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Time</label>
+                    <input
+                      type="text"
+                      value={schedule.time}
+                      onChange={(e) => updateSchedule("time", e.target.value)}
+                      className="w-full mt-1 bg-card text-foreground border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Timezone</label>
+                    <input
+                      type="text"
+                      value={schedule.timezone}
+                      onChange={(e) => updateSchedule("timezone", e.target.value)}
+                      className="w-full mt-1 bg-card text-foreground border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
             {error && <p className="text-destructive text-sm">{error}</p>}
             {warning && <p className="text-amber-400 text-sm">{warning}</p>}
 
-            <button
-              onClick={handleGenerateResolved}
-              className="w-full px-6 py-2.5 rounded-lg font-bold text-sm bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
-            >
-              Generate
-            </button>
+            {mode === "result" && (
+              <button
+                onClick={handleGenerateResolved}
+                className="w-full px-6 py-2.5 rounded-lg font-bold text-sm bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+              >
+                Generate
+              </button>
+            )}
 
-            {warData && (
+            {mode === "result" && warData && (
               <div className="space-y-3 pt-2">
                 <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Customize</div>
 
@@ -330,24 +457,49 @@ const Index = () => {
                   disabled={isDownloading}
                   className="w-full px-6 py-3 rounded-lg font-bold text-sm bg-secondary text-secondary-foreground hover:opacity-90 transition-opacity"
                 >
-                  {isDownloading ? "Preparing PNG..." : "⬇ Download PNG"}
+                  {isDownloading ? "Preparing PNG..." : "Download PNG"}
                 </button>
               </div>
+            )}
+
+            {mode === "schedule" && (
+              <button
+                onClick={handleDownload}
+                disabled={isDownloading}
+                className="w-full px-6 py-3 rounded-lg font-bold text-sm bg-secondary text-secondary-foreground hover:opacity-90 transition-opacity"
+              >
+                {isDownloading ? "Preparing PNG..." : "Download PNG"}
+              </button>
             )}
           </div>
 
           {/* Right: Preview */}
           <div className="flex-1 overflow-auto min-h-[500px]">
-            {warData ? (
+            {mode === "schedule" ? (
+              <div className="w-full flex justify-center">
+                <div
+                  className="rounded-xl overflow-hidden shadow-2xl border border-border origin-top-left"
+                  style={{
+                    width: 1600,
+                    height: 998,
+                    transform: "scale(0.42)",
+                    marginBottom: -998 * 0.58,
+                    marginRight: -1600 * 0.58,
+                  }}
+                >
+                  <MatchScheduleCard ref={scheduleCardRef} data={schedule} />
+                </div>
+              </div>
+            ) : warData ? (
               <div className="w-full flex justify-center">
                 <div 
                   className="rounded-xl overflow-hidden shadow-2xl border border-border origin-top-left" 
                   style={{ 
                     width: 1670,
                     height: 1580,
-                    transform: "scale(0.45)", // Fixed scale that fits most screens
-                    marginBottom: -1580 * 0.55, // Negative margin to collapse the space occupied by the scaled-down element
-                    marginRight: -1670 * 0.55,
+                    transform: "scale(0.32)", // Preview-only scale; export stays full size
+                    marginBottom: -1580 * 0.68,
+                    marginRight: -1670 * 0.68,
                   }}
                 >
                   <WarResultCard ref={cardRef} data={warData} overrides={overrides} />
